@@ -3,7 +3,14 @@ const path = require('path')
 const express = require('express');
 const bodyParser = require('body-parser');
 
+const errorController = require('./controllers/error')
+
 const app = express();
+
+// Tells express what view engine we are using, and what file extensions to look for when using the res.render() method for creating an html page from our templating engine to send to the client.
+app.set('view engine', 'ejs');
+// Explicitly tells express where the views directory is located
+app.set('views', 'views');
 
 const adminRoutes = require('./routes/admin');
 const shopRoutes = require('./routes/shop');
@@ -15,8 +22,6 @@ app.use(express.static(path.join(__dirname, 'public')))
 app.use('/admin', adminRoutes);
 app.use(shopRoutes);
 
-app.use((req, res, next) => {
-    res.status(404).sendFile(path.join(__dirname, 'views', '404.html'))
-})
+app.use(errorController.get404)
 
 app.listen(3000)
