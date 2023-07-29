@@ -1,5 +1,17 @@
 const Product = require('../models/product')
 
+exports.getProducts = (req, res, next) => {
+    req.user.getProducts()
+    .then(products => {
+        res.render('admin/products', {
+            prods: products,
+            pageTitle: 'Admin Products',
+            path: '/admin/products'
+        })
+    })
+    .catch(err => console.log(err))
+}
+
 exports.getAddProduct = (req, res, next) => {
     // Method for sending static html files.
     // res.sendFile(path.join(rootDir, 'views', 'add-product.html'))
@@ -13,9 +25,18 @@ exports.getAddProduct = (req, res, next) => {
 
 exports.postAddProduct = (req, res, next) => {
     const {title, imageUrl, description, price} = req.body;
-    const product = new Product(null, title, imageUrl, description, price)
-    product.save();
-    res.redirect('/');
+    // Leverages sequalize association helper methods to create a product that contains a foreign key that references the pk on the User table.
+    req.user.createProduct({
+        title,
+        price,
+        imageUrl,
+        description
+    })
+    .then(result => {
+        console.log('Created Product!');
+        res.redirect('/admin/products');
+    })
+    .catch(err => console.log(err));
 }
 
 exports.getEditProduct = (req, res, next) => {
@@ -25,7 +46,9 @@ exports.getEditProduct = (req, res, next) => {
     }
 
     const prodId = req.params.productId;
-    Product.findById(prodId, product => {
+    // Sequelize version of findById
+    Product.findByPk(prodId)
+    .then(product => {
         if (!product) {
             return res.redirect('/');
         }
@@ -36,28 +59,37 @@ exports.getEditProduct = (req, res, next) => {
             product
         })
     })
+    .catch(err => console.log(err))
 }
 
 exports.postEditProduct = (req, res, next) => {
     const {productId, title, imageUrl, description, price} = req.body;
-    const updatedProduct = new Product(productId, title, imageUrl, description, price);
-    updatedProduct.save();
-    res.redirect('/admin/products')
+    Product.findByPk(productId)
+    .then(product => {
+        product.title = title;
+        product.price = price;
+        product.imageUrl = imageUrl;
+        product.description = description;
+        // Sequelize method for updating a product.
+        product.save();
+    })
+    .then(result => {
+        console.log("Updated product!")
+        res.redirect('/admin/products')
+    })
+    .catch(err => console.log(err))
 }
 
 exports.postDeleteProduct = (req, res, next) => {
     const prodId = req.body.productId;
-    Product.deleteById(prodId);
-    res.redirect('/admin/products');
-}
-
-exports.getProducts = (req, res, next) => {
-    // res.sendFile(path.join(rootDir, 'views', 'shop.html'))
-    Product.fetchAll((products) => {
-        res.render('admin/products', {
-            prods: products,
-            pageTitle: 'Admin Products',
-            path: '/admin/products'
-        })
+    Product.findByPk(prodId)
+    .then(product => {
+        // Sequelize version of delete
+        return product.destroy()
     })
+    .then(result => {
+        console.log('Deleted Product.');
+        res.redirect('/admin/products');
+    })
+    .catch(err => console.log(err))
 }
