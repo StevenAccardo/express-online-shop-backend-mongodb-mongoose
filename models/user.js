@@ -1,95 +1,62 @@
-const mongodb = require('mongodb')
+const mongoose = require('mongoose')
 
-const getDb = require('../util/database').getDb;
+const Schema = mongoose.Schema;
 
-const ObjectId = mongodb.ObjectId;
-
-class User {
-    constructor(username, email, cart, id) {
-        this.name = username;
-        this.email = email;
-        this.cart = cart;
-        this._id = id ? new ObjectId(id) : null;
-    }
-
-    save() {
-        const db = getDb();
-        return db.collection('users').insertOne(this)
-        .then(result => console.log('User inserted into DB.'))
-        .catch(err => console.log(err))
-    }
-
-    addToCart(product) {
-        const  cartProductIndex = this.cart.items.findIndex(cp => {
-            // Need to convert to strings in order to use strict equal because the _id is not actually of type string, even if the values are equal.
-            return cp.productId.toString() === product._id.toString();
-        })
-        let newQuantity = 1;
-        // Copy the cart items without mutating the originals
-        const updatedCartItems = [...this.cart.items];
-
-        if (cartProductIndex >= 0) {
-            newQuantity = this.cart.items[cartProductIndex].quantity + 1;
-            updatedCartItems[cartProductIndex].quantity = newQuantity;
-        } else {
-            updatedCartItems.push({productId: new ObjectId(product._id), quantity: newQuantity})
-        }
-
-        const updatedCart = { 
-            items: updatedCartItems 
-        };
-
-        const db = getDb();
-        return db.collection('users').updateOne({ _id: this._id }, { $set: { cart: updatedCart }})
-    }
-
-    getCart() {
-        const db = getDb();
-        const productIds = this.cart.items.map(item => item.productId)
-        return db.collection('products').find({_id: {$in: productIds}})
-        .toArray()
-        .then(products => products.map(p => ({ ...p, quantity: this.cart.items.find(item => item.productId.toString() === p._id.toString()).quantity })))
-    }
-
-    deleteItemFromCart(productId) {
-        const updatedCartItems = this.cart.items.filter(item => {
-            return item.productId.toString() !== productId.toString()
-        })
-        const db = getDb();
-        return db.collection('users').updateOne({ _id: this._id }, { $set: { cart: {items: updatedCartItems} }})
-    }
-
-    addOrder() {
-        const db = getDb();
-        return this.getCart()
-        .then(products => {
-            const order = {
-                items: products,
-                user: {
-                    _id: new ObjectId(this._id),
-                    name: this.name
-                }
+const userSchema = new Schema({
+    name: {
+        type: String,
+        required: true
+    },
+    email: {
+        type: String,
+        required: true
+    },
+    cart: {
+        items: [
+            {
+                productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+                quantity: { type: Number, required: true }
             }
+        ]
+    }
+});
 
-            return db.collection('orders').insertOne(order)
-        })
-        .then(result => {
-            this.cart = { items: [] }
-            return db.collection('users').updateOne({ _id: this._id }, { $set: { cart: {items: []} }})
-        })
+userSchema.methods.addToCart = function(product) {
+    const  cartProductIndex = this.cart.items.findIndex(cp => {
+        // Need to convert to strings in order to use strict equal because the _id is not actually of type string, even if the values are equal.
+        return cp.productId.toString() === product._id.toString();
+    })
+    let newQuantity = 1;
+    // Copy the cart items without mutating the originals
+    const updatedCartItems = [...this.cart.items];
+
+    if (cartProductIndex >= 0) {
+        newQuantity = this.cart.items[cartProductIndex].quantity + 1;
+        updatedCartItems[cartProductIndex].quantity = newQuantity;
+    } else {
+        updatedCartItems.push({productId: product._id, quantity: newQuantity})
     }
 
-    getOrders() {
-        const db = getDb();
-        return db.collection('orders').find({'user._id': new ObjectId(this._id)}).toArray()
-    }
+    const updatedCart = { 
+        items: updatedCartItems 
+    };
 
-    static findById(userId) {
-        const db = getDb();
-        return db.collection('users').findOne({_id: new ObjectId(userId)})
-        .then(user => user)
-        .catch(err => console.log(err))
-    }
+    this.cart = updatedCart;
+    return this.save();
 }
 
-module.exports = User;
+userSchema.methods.removeFromCart = function(productId) {
+    const updatedCartItems = this.cart.items.filter(item => {
+        return item.productId.toString() !== productId.toString()
+    })
+
+    this.cart.items = updatedCartItems;
+    return this.save();
+}
+
+userSchema.methods.clearCart = function() {
+    this.cart = {items:[]}
+    return this.save();
+}
+
+module.exports = mongoose.model('User', userSchema);

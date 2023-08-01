@@ -1,8 +1,7 @@
 const Product = require('../models/product')
-const mongodb = require('mongodb');
 
 exports.getProducts = (req, res, next) => {
-    Product.fetchAll()
+    Product.find()
     .then(products => {
         res.render('admin/products', {
             prods: products,
@@ -14,9 +13,6 @@ exports.getProducts = (req, res, next) => {
 }
 
 exports.getAddProduct = (req, res, next) => {
-    // Method for sending static html files.
-    // res.sendFile(path.join(rootDir, 'views', 'add-product.html'))
-
     res.render('admin/edit-product', {
         pageTitle: 'Add Product',
         path: '/admin/add-product',
@@ -26,7 +22,7 @@ exports.getAddProduct = (req, res, next) => {
 
 exports.postAddProduct = (req, res, next) => {
     const {title, imageUrl, description, price} = req.body;
-    const product = new Product(title, price, imageUrl, description, null, req.user._id);
+    const product = new Product({ title, price, imageUrl, description, userId: req.user });
     product.save()
     .then(result => {
         console.log('Created Product!');
@@ -59,8 +55,14 @@ exports.getEditProduct = (req, res, next) => {
 
 exports.postEditProduct = (req, res, next) => {
     const {productId, title, imageUrl, description, price} = req.body;
-    const product = new Product(title, price, imageUrl, description, productId)
-    product.save()
+    Product.findById(productId)
+    .then(product => {
+        product.title = title;
+        product.price = price;
+        product.description = description;
+        product.imageUrl = imageUrl;
+        return product.save();
+    })
     .then(result => {
         console.log("Updated product!")
         res.redirect('/admin/products')
@@ -70,7 +72,7 @@ exports.postEditProduct = (req, res, next) => {
 
 exports.postDeleteProduct = (req, res, next) => {
     const prodId = req.body.productId;
-    Product.deleteById(prodId)
+    Product.findByIdAndRemove(prodId)
     .then(() => {
         res.redirect('/admin/products');
     })

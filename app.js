@@ -2,9 +2,10 @@ const path = require('path')
 
 const express = require('express');
 const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+require('dotenv').config()
 
 const errorController = require('./controllers/error');
-const mongoConnect = require('./util/database').mongoConnect;
 const User = require('./models/user');
 
 const app = express();
@@ -22,10 +23,10 @@ app.use(bodyParser.urlencoded({extended: false}));
 app.use(express.static(path.join(__dirname, 'public')))
 
 app.use((req, res, next) => {
-    User.findById('64c6baf61d75fb6b42dde423')
-    // Storing the sequalize object of the user record returned into the request before going to routes, so that the user can be used, as it would if we had some sort of authentiation/authorization logic.
-    .then(({name, email, cart, _id}) => {
-        req.user = new User(name, email, cart, _id);
+    User.findById('64c8679be6a2264d45e14339')
+    // Storing the mongoose object of the user record returned into the request before going to routes, so that the user can be used, as it would if we had some sort of authentiation/authorization logic.
+    .then(user => {
+        req.user = user;
         next();
     })
     .catch(err => console.log(err))
@@ -38,6 +39,21 @@ app.use(shopRoutes);
 // A route that could be exported, but handles any invalid routes.
 app.use(errorController.get404)
 
-mongoConnect(() => {
-    app.listen(3000);
-});
+mongoose.connect(`mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_CLUSTER}.46tvxte.mongodb.net/shop?retryWrites=true&w=majority`)
+.then(() => {
+    User.findOne()
+    .then(user => {
+        if (!user) {
+            const user = new User({
+                name: 'Steve',
+                email: 'test@test.com',
+                cart: {
+                    items: []
+                }
+            })
+            user.save()
+        }
+    })
+    app.listen(3000)
+})
+.catch(err => console.log(err));
