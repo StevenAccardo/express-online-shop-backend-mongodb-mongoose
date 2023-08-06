@@ -8,6 +8,9 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 // Used for storing sessions in the db instead of just in memory for longer durability.
 const MongoDBStore = require('connect-mongodb-session')(session);
+// Used for flashing data onto our session for limited time use without storing on the session permenantly. In this case we will use it for sending error messages.
+const flash = require('connect-flash');
+
 
 const errorController = require('./controllers/error');
 const User = require('./models/user');
@@ -34,6 +37,8 @@ app.use(bodyParser.urlencoded({extended: false}));
 app.use(express.static(path.join(__dirname, 'public')))
 // Initiliazes a session property that saves to our mongodb session collection.
 app.use(session({secret: process.env.SECRET, resave: false, saveUninitialized: false, store}))
+// Creates the flash middleware which puts the flash method on the req object. Once a key is created and stored in the session, once it is retreived from the session, it is removed from the session.
+app.use(flash());
 
 // Even though we are storing the user informatin in the mongodDB session collection, we have to still pull the user info from the shop collection because that is the collection that understands our relations and allows us to use necesarry methods.
 app.use((req, res, next) => {
@@ -48,6 +53,11 @@ app.use((req, res, next) => {
     })
     .catch(err => console.log(err))
 })
+
+app.use((req, res, next) => {
+    res.locals.isAuthenticated = req.session.isLoggedIn;
+    next();
+})
 app.use('/admin', adminRoutes);
 // // middleware that routes to shopRoute modulate for anything starting with '/'
 app.use(shopRoutes);
@@ -58,19 +68,6 @@ app.use(errorController.get404)
 
 mongoose.connect(MONGODB_URI)
 .then(() => {
-    User.findOne()
-    .then(user => {
-        if (!user) {
-            const user = new User({
-                name: 'Steve',
-                email: 'test@test.com',
-                cart: {
-                    items: []
-                }
-            })
-            user.save()
-        }
-    })
-    app.listen(3000)
+    app.listen(3000);
 })
 .catch(err => console.log(err));
