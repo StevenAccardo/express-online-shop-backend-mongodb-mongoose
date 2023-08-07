@@ -1,7 +1,8 @@
 const Product = require('../models/product')
 
 exports.getProducts = (req, res, next) => {
-    Product.find()
+    // Since this is an admin route, we only show products that were created by the user/shop admin.
+    Product.find({userId: req.user._id})
     .then(products => {
         res.render('admin/products', {
             prods: products,
@@ -57,6 +58,11 @@ exports.postEditProduct = (req, res, next) => {
     const {productId, title, imageUrl, description, price} = req.body;
     Product.findById(productId)
     .then(product => {
+        // This blocks users who didn't create the product from editing the product. This is an extra protection to not returning the products in the view.
+        if (product.userId.toString() !== req.user._id.toString()) {
+            return res.redirect('/')
+        }
+
         product.title = title;
         product.price = price;
         product.description = description;
@@ -72,7 +78,8 @@ exports.postEditProduct = (req, res, next) => {
 
 exports.postDeleteProduct = (req, res, next) => {
     const prodId = req.body.productId;
-    Product.findByIdAndRemove(prodId)
+    // Only delete the product from the db if both the product id and the user id on the product match the request. Stops users from deleting products that they didn't create. This is in addition to 
+    Product.deleteOne({_id: prodId, userId: req.body._id})
     .then(() => {
         res.redirect('/admin/products');
     })
