@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const sendgridTransport = require('nodemailer-sendgrid-transport');
+const { validationResult } = require('express-validator')
 
 const User = require('../models/user');
 require('dotenv').config();
@@ -23,7 +24,12 @@ exports.getSignup = (req, res, next) => {
     res.render('auth/signup', {
         path: '/signup',
         pageTitle: 'Signup',
-        errorMessage: message
+        errorMessage: message,
+        oldInput: {
+            email: '',
+            password: '',
+            confirmPassword: ''
+        }
     }); 
 };
 
@@ -38,52 +44,69 @@ exports.getLogin = (req, res, next) => {
         path: '/login',
         pageTitle: 'Login',
         // Once used, this 'error' key and value will be removed from the session.
-        errorMessage: message
+        errorMessage: message,
+        oldInput: {email: '', password: ''}
     });
 };
 
 exports.postSignup = (req, res, next) => {
     const {email, password, confirmPassword} = req.body;
-    User.findOne({email})
-    .then(userDoc => {
-        if (userDoc) {
-            req.flash('error', 'E-mail already exists.')
-            return res.redirect('/signup');
-        }
-        return bcrypt.hash(password, 12)
-        .then(hashedPassword => {
-            const user = new User({
-                email,
-                password: hashedPassword,
-                cart: { items: [] }
-            })
-    
-            return user.save()
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+        return res.status(422)
+        .render('auth/signup', {
+            path: '/signup',
+            pageTitle: 'Signup',
+            errorMessage: errors.array()[0].msg,
+            oldInput: {email, password, confirmPassword}
+        }); ;
+    }
+    bcrypt.hash(password, 12)
+    .then(hashedPassword => {
+        const user = new User({
+            email,
+            password: hashedPassword,
+            cart: { items: [] }
         })
-        .then(() => {
-            console.log('New user created.');
-            res.redirect('/login')
-            return transporter.sendMail({
-                to: email,
-                from: 'accardo.steven@gmail.com',
-                subject: 'Signup succeeded!',
-                html: '<h1>You successfully signed</h1>'
-            })
-        })
-        .catch(err => console.log(err));
+
+        return user.save()
     })
-    .catch(err => console.log(err))
+    .then(() => {
+        console.log('New user created.');
+        res.redirect('/login')
+        return transporter.sendMail({
+            to: email,
+            from: 'accardo.steven@gmail.com',
+            subject: 'Signup succeeded!',
+            html: '<h1>You successfully signed</h1>'
+        })
+    })
+    .catch(err => console.log(err));
 };
 
 exports.postLogin = (req, res, next) => {
     const {email, password} = req.body;
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+        return res.status(422)
+        .render('auth/login', {
+            path: '/login',
+            pageTitle: 'Login',
+            errorMessage: errors.array()[0].msg,
+            oldInput: {email, password}
+        });
+    }
     User.findOne({email})
     // Storing the mongoose object of the user record returned into the request before going to routes, so that the user can be used, as it would if we had some sort of authentiation/authorization logic.
     .then(user => {
         if (!user) {
-            // Stores something temporarily in a session until it is used, then it is removed from the session.
-            req.flash('error', 'Invalid email or password.')
-            return res.redirect('/login')
+            return res.status(422)
+            .render('auth/login', {
+                path: '/login',
+                pageTitle: 'Login',
+                errorMessage: 'Invalid email or password.',
+                oldInput: {email, password}
+            });
         }
         bcrypt.compare(password, user.password)
         .then(doMatch => {
@@ -96,8 +119,13 @@ exports.postLogin = (req, res, next) => {
                     res.redirect('/')
                 })
             }
-            req.flash('error', 'Invalid email or password.');
-            res.redirect('/login');
+            return res.status(422)
+            .render('auth/login', {
+                path: '/login',
+                pageTitle: 'Login',
+                errorMessage: 'Invalid email or password.',
+                oldInput: {email, password}
+            });
         })
         // Catch only triggered if there was an error, not just if the passwords don't match.
         .catch(err => {
