@@ -48,10 +48,15 @@ app.use((req, res, next) => {
     User.findById(req.session.user._id)
     // Storing the mongoose object of the user record returned into the request before going to routes, so that the user can be used, as it would if we had some sort of authentiation/authorization logic.
     .then(user => {
+        if (!user) {
+            return next();
+        }
         req.user = user;
         next();
     })
-    .catch(err => console.log(err))
+    .catch(err => {
+        next(new Error(err))
+    })
 })
 
 app.use((req, res, next) => {
@@ -63,8 +68,14 @@ app.use('/admin', adminRoutes);
 app.use(shopRoutes);
 app.use(authRoutes);
 
+app.use('/500', errorController.get500)
+
 // A route that could be exported, but handles any invalid routes.
 app.use(errorController.get404)
+
+app.use((error, req, res, next) => {
+    res.redirect('/500')
+})
 
 mongoose.connect(MONGODB_URI)
 .then(() => {
