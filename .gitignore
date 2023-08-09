@@ -1,3 +1,7 @@
 node_modules
 .env
 .vscode
+images/*
+!images/.gitkeep
+data/invoices/*
+!data/invoices/.gitkeep
