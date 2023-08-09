@@ -1,6 +1,8 @@
 const {validationResult} = require('express-validator');
 
 const Product = require('../models/product')
+const fileHelper = require('../util/file');
+const product = require('../models/product');
 
 exports.getProducts = (req, res, next) => {
     // Since this is an admin route, we only show products that were created by the user/shop admin.
@@ -31,7 +33,24 @@ exports.getAddProduct = (req, res, next) => {
 }
 
 exports.postAddProduct = (req, res, next) => {
-    const {title, imageUrl, description, price} = req.body;
+    const {title, description, price} = req.body;
+    const image = req.file;
+    console.log(image)
+    if (!image) {
+        return res.status(422).render('admin/edit-product', {
+            pageTitle: 'Add Product',
+            path: '/admin/edit-product',
+            editing: false,
+            hasError: true,
+            errorMessage: 'Attached file is not the correct type. Please upload images with .png, .jpg, or .jpeg extension only.',
+            product: {
+                title,
+                price,
+                description
+            }
+        })
+    }
+
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
@@ -43,12 +62,13 @@ exports.postAddProduct = (req, res, next) => {
             errorMessage: errors.array()[0].msg,
             product: {
                 title,
-                imageUrl,
                 price,
                 description
             }
         })
     }
+
+    const imageUrl = image.path;
 
     const product = new Product({ title, price, imageUrl, description, userId: req.user });
     product.save()
@@ -94,7 +114,8 @@ exports.getEditProduct = (req, res, next) => {
 }
 
 exports.postEditProduct = (req, res, next) => {
-    const {productId, title, imageUrl, description, price} = req.body;
+    const {productId, title, description, price} = req.body;
+    const image = req.file;
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
@@ -106,7 +127,6 @@ exports.postEditProduct = (req, res, next) => {
             errorMessage: errors.array()[0].msg,
             product: {
                 title,
-                imageUrl,
                 price,
                 description,
                 _id: productId
@@ -124,7 +144,10 @@ exports.postEditProduct = (req, res, next) => {
         product.title = title;
         product.price = price;
         product.description = description;
-        product.imageUrl = imageUrl;
+        if (image) {
+            fileHelper.deleteFile(product.imageUrl);
+            product.imageUrl = image.path;
+        }
         return product.save();
     })
     .then(result => {
@@ -142,8 +165,17 @@ exports.postEditProduct = (req, res, next) => {
 exports.postDeleteProduct = (req, res, next) => {
     const prodId = req.body.productId;
     // Only delete the product from the db if both the product id and the user id on the product match the request. Stops users from deleting products that they didn't create. This is in addition to 
-    Product.deleteOne({_id: prodId, userId: req.body._id})
+    Product.findById(prodId)
+    .then(product => {
+        if (!product) {
+            return next(new Error('Product not found.'));
+        }
+
+        fileHelper.deleteFile(product.imageUrl);
+        return Product.deleteOne({_id: prodId, userId: req.user._id})
+    })
     .then(() => {
+        console.log('Product Deleted!');
         res.redirect('/admin/products');
     })
     .catch(err => {
